@@ -1,0 +1,9 @@
+* This software will sort your series with the following Structure.
+* Series name
+* 	Season number
+* 		Episodes file
+
+
+-The file series.conf must be in the same folder of omnisorter.
+-Missing Episodes mode must work with a already ordered folder tree.
+

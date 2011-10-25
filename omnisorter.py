@@ -13,7 +13,7 @@ __DIRECTORY_TO_WORK_WITH__ = "/home/omniwired/Downloads"
 __EXTENSIONS_TO_LOOK_FOR__ = [".avi", ".mkv"]  # sin uso
 __SERIES_TO_LOOK_FOR__ = ['The big bang theory', 'Fringe']  # sin uso
 target = __DIRECTORY_TO_WORK_WITH__ + "/Videos"
-config_file = os.path.join(os.getcwd(), "series.conf")  # os.getcwd()
+config_file = os.path.join(sys.path[0], "series.conf")  # os.getcwd()
 
 mode = len(sys.argv)
 
@@ -56,8 +56,8 @@ def normalize(str):
 
 def automatic_behaviour():
 
-    a = process_series(__DIRECTORY_TO_WORK_WITH__, 1)
-    move_to_target(a, target, 1)
+    a = process_series(__DIRECTORY_TO_WORK_WITH__, 0)
+    move_to_target(a, target, 0)
 
 
 def process_series(__DIRECTORY_TO_WORK_WITH__, verbose):
@@ -130,7 +130,6 @@ def move_to_target(col_findings, target, verbose):
         if not os.path.isdir(season_to_create):
             os.mkdir(season_to_create)
         if root != season_to_create:
-            print root, season_to_create
             file_to_create = os.path.join(season_to_create, filename)
             if os.path.getsize(fullpath) < freespace(season_to_create):
                 MB_moved += os.path.getsize(fullpath) / 1024 / 1024
@@ -143,7 +142,8 @@ def move_to_target(col_findings, target, verbose):
                 print "no freespace", season_to_create, "to move", fullpath
     finish_time = time.time()
     total_time = finish_time - start_time
-    print MB_moved, "Mb moved in", int(total_time), "seconds.", MB_moved / total_time, "Mb/s"
+    if verbose is 1:
+        print MB_moved, "Mb moved in", int(total_time), "seconds.", MB_moved / total_time, "Mb/s"
 
 
 def group(col_findings, by_what, record_what):
@@ -230,19 +230,9 @@ elif mode >= 2:
             a = process_series(sys.argv[2], 0)
             search_missing(a)
         else:
-            print "For finding missing move you need a [source]"
+            print "For finding missing you need a sorted [source]"
     else:
         print "help ahora"
         quit()
 else:
     automatic_behaviour()
-
-##a =  get_series_list()
-##print a
-#a = process_series(__DIRECTORY_TO_WORK_WITH__, 0)
-#move_to_target(a, target, 1)
-#clean("/home/omniwired/Downloads/Videos")
-
-
-#search_missing(a)
-#
