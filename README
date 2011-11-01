@@ -3,6 +3,11 @@
 * 	Season number
 * 		Episodes file
 
+Extra features:
+* Detect duplicates using MD5
+* Automatically unrar series
+* Find missing episodes
+* Delete samples, and other configurable unwanted files
 
 -The file series.conf must be in the same folder of omnisorter.
 -Missing Episodes mode must work with a already ordered folder tree.

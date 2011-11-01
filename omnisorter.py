@@ -8,15 +8,63 @@ import re
 import sys
 import time
 from sets import Set
+from itertools import groupby
+import hashlib
+import errno
+import pickle
+from progressbar import AnimatedMarker, Bar, BouncingBar, Counter, ETA, \
+                        FileTransferSpeed, FormatLabel, Percentage, \
+                        ProgressBar, ReverseBar, RotatingMarker, \
+                        SimpleProgress, Timer
 # no detecta .AVI el missing finder
-
+processed_series_size = 0
 __DIRECTORY_TO_WORK_WITH__ = "/home/omniwired/Downloads"
 __EXTENSIONS_TO_LOOK_FOR__ = ".avi", ".mkv", ".rar"
-__SERIES_TO_LOOK_FOR__ = ['The big bang theory', 'Fringe']  # not in use
 target = __DIRECTORY_TO_WORK_WITH__ + "/Videos"
 config_file = os.path.join(sys.path[0], "series.conf")  # os.getcwd()
 
+
+
 mode = len(sys.argv)
+
+def process_series(__DIRECTORY_TO_WORK_WITH__, verbose):
+
+    regex = '(?=[S-s][0-9][0-9][E-e][0-9][0-9])\w+' #old SXXEXX
+    # regex = '(?=([0-9][x][0-9][0-9])|([S-s][0-9][0-9][E-e][0-9][0-9]))\w+' #SXXEXX & xXxx
+    # (?=([0-9][x][0-9][0-9]))\w+
+    col_findings = []
+    global processed_series_size
+    for root, dirs, files in os.walk(__DIRECTORY_TO_WORK_WITH__):
+#        if 'Videos' in dirs:
+#            dirs.remove('Videos')  # don't visit Videos directories
+        for item in files:
+            if item.endswith(__EXTENSIONS_TO_LOOK_FOR__):
+                match = re.search(regex, item)
+                fullpath = os.path.join(root, item)
+                if match is not None:
+                    if verbose is 1:
+                        size = os.path.getsize(fullpath) / 1024 / 1024
+                        print "Processsing " + item, size, "MB"
+                        processed_series_size += size
+                    donde_cortar = match.span()
+                    info_episodio = item[donde_cortar[0]:donde_cortar[1]]
+                    serie = normalize(item[:donde_cortar[0]])
+                    season = info_episodio[1:3]
+#                    if info_episodio.find('S') is not -1:                    
+#                        season = info_episodio[1:3]
+#                    else:
+#                        season = info_episodio[0]
+#                        print "season", season
+                    # special case rar
+                    if item.endswith(".rar"):
+                        print "unrar -> ", fullpath
+                        unrar_module(fullpath, root)
+                    else:
+                        col_findings.append([serie, info_episodio, \
+                                        fullpath, root, season, item])
+    if verbose is 1:
+        print "Processed", processed_series_size / 1024, "Gb"
+    return col_findings
 
 
 def unrar_module(fullpath, root):
@@ -28,14 +76,29 @@ def unrar_module(fullpath, root):
 
 
 def md5_file(fileName, block_size=2 ** 20):
-    import hashlib
+
     f = open(fileName, 'rb')
     md5 = hashlib.md5()
+    parts = os.path.getsize(fileName) / block_size
+ #   progress bar
+    widgets = ['Hashing: ', Percentage(), ' ', Bar(marker=RotatingMarker()),
+               ' ', ETA(), ' ', FileTransferSpeed()]
+    pbar = ProgressBar(widgets=widgets, maxval=(parts+1)*block_size).start()
+#    for i in range(parts):
+        #real work
+    leidos = 0
     while True:
         data = f.read(block_size)
         if not data:
             break
         md5.update(data)
+        leidos += block_size
+        pbar.update(leidos)
+        #realwork
+    
+    pbar.finish()
+   #  progress bar
+    
     return md5.hexdigest()
 
 
@@ -60,25 +123,71 @@ def normalize(str):
         str = str[:-1]
     return str
 
+def save(data, file):
+    
+    output = open(file, 'wb')
+    pickle.dump(data, output)
+    output.close()
+
+def load(file):
+
+    if not os.path.exists(file):
+        save(dict(), file)
+    input = open(file, 'rb')
+    data = pickle.load(input)
+    input.close()
+    return data
+
 
 def find_duplicates(series_found):
-
-    # optimizar guardando los hashes alguna vez encontrados
+    
+    # que no borre todo cuando se desconecta un externo (buscar /media, por ej)
+    global processed_series_size
+    total = 0
     set_hack = Set()
     duplicates_list = []
+    dic = dict()
+    file = os.path.join(sys.path[0], "hashes.md5")
+    dic = load(file)
+    pbar = ProgressBar(widgets=[Percentage(), Bar()], maxval=processed_series_size).start()    
+    
+#   Rainbow table for the already discovered hashes
     for item in series_found:
         size = os.path.getsize(item[2]) / 1024 / 1024
-        print "Hashing", item[2], size, "Mb"
-        hash = md5_file(item[2])
-        if hash not in set_hack:
-            set_hack.add(hash)
+        total += size
+        pbar.update(total)
+        if item[2] not in dic:
+            dic[item[2]] = md5_file(item[2])
+#   Rainbow table for the already discovered hashes
+    pbar.finish()
+    
+    hash_dic = dict()
+    for x in dic.keys():
+        if not os.path.exists(x):
+            print x, "Doesn't exists anymore"
+            del dic[x]
+            continue
+    
+        list = []
+        if dic[x] not in hash_dic:
+            list.append(x)
+            hash_dic[dic[x]] = list
         else:
-            duplicates_list.append(item[2])
+            for cosa in hash_dic[dic[x]]:
+                list.append(cosa)
+            list.append(x)
+            hash_dic[dic[x]] = list
+    for item in hash_dic:
+        if len(hash_dic[item]) > 1:
+            duplicates_list.extend(hash_dic[item])
+            
+    save(dic, file)
+    
     if len(duplicates_list) != 0:
         print "\n \n These are the duplicates that have been found"
         for x in duplicates_list:
             print x
-        print "Do you want to delete some/all? [y] [n] [all]"
+        print "Do you want to delete some? [y] [n]"
         input = raw_input()
         if input in ('no', 'n'):
             quit()
@@ -87,48 +196,13 @@ def find_duplicates(series_found):
                 print x, "delete?"
                 if raw_input() in ('yes', 'y'):
                     os.remove(x)
-        elif input in ('all'):
-            for x in duplicates_list:
-                os.remove(x)
 
 
 def automatic_behaviour():
-
+    
     series_found = process_series(__DIRECTORY_TO_WORK_WITH__, 0)
     move_to_target(series_found, target, 0)
-
-
-def process_series(__DIRECTORY_TO_WORK_WITH__, verbose):
-
-    regex = '(?=[S-s][0-9][0-9][E-e][0-9][0-9])\w+'
-    col_findings = []
-    total_size = 0
-    for root, dirs, files in os.walk(__DIRECTORY_TO_WORK_WITH__):
-#        if 'Videos' in dirs:
-#            dirs.remove('Videos')  # don't visit Videos directories
-        for item in files:
-            if item.endswith(__EXTENSIONS_TO_LOOK_FOR__):
-                match = re.search(regex, item)
-                fullpath = os.path.join(root, item)
-                if match is not None:
-                    if verbose is 1:
-                        size = os.path.getsize(fullpath) / 1024 / 1024
-                        print "Processsing " + item, size, "MB"
-                        total_size += size
-                    donde_cortar = match.span()
-                    info_episodio = item[donde_cortar[0]:donde_cortar[1]]
-                    serie = normalize(item[:donde_cortar[0]])
-                    season = info_episodio[1:3]
-                    # special case rar
-                    if item.endswith(".rar"):
-                        unrar_module(fullpath, root)
-                    else:
-                        col_findings.append([serie, info_episodio, \
-                                        fullpath, root, season, item])
-    if verbose is 1:
-        print "Processed", total_size / 1024, "Gb"
-    return col_findings
-
+    
 
 def freespace(p):
     """
@@ -154,6 +228,11 @@ def move_to_target(col_findings, target, verbose):
         root = x[3]
         temporada = x[4]
         filename = x[5]
+#        if info_episodio.find('S') is not -1:                    
+#            filename = x[5]
+#        si tiene la forma xXxx le creamos un nuevo filename
+#            season = info_episodio[0]
+#            print "season", season
 
         # Special Cases
         for serie_from_conf in special_series_list:
@@ -200,7 +279,6 @@ def group(col_findings, by_what, record_what):
     sortkeyfn = key = lambda s: s[by_what]
     input = col_findings
     input.sort(key=sortkeyfn)
-    from itertools import groupby
     result = []
     for key, valuesiter in groupby(input, key=sortkeyfn):
         result.append(dict(type=key, items=list(v[record_what] \
@@ -245,7 +323,6 @@ def interactive(__DIRECTORY_TO_WORK_WITH__, target):
 
 def clean(__DIRECTORY_TO_WORK_WITH__, mode):
 
-    import errno
     # "sample" is dangerous is current implementation
     unwanted = [".DS_Store", "Thumbs.db"]
     for root, dirs, files in os.walk(__DIRECTORY_TO_WORK_WITH__):
@@ -295,3 +372,20 @@ elif mode >= 2:
         quit()
 else:
     automatic_behaviour()
+#found_series = process_series("/home/omniwired/Downloads/Videos/The It Crowd", 1)
+#find_duplicates(found_series)
+#import pickle
+#cosa = dict()
+#cosa['file'] = "data"
+#
+#if "file" in cosa:
+#    print cosa
+#
+#output = open('data.pkl', 'wb')
+#
+## Pickle dictionary using protocol 0.
+#pickle.dump(cosa, output)
+#output.close()
+#input = open('data.pkl', 'rb')
+#c = pickle.load(input)
+#print "c es", c
