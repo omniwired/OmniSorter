@@ -5,7 +5,7 @@ import os
 import shutil
 import re
 import sys
-
+import errno
 
 __DIRECTORY_TO_WORK_WITH__ = "/home/omniwired/Downloads/"
 __EXTENSIONS_TO_LOOK_FOR__ = [".avi", ".mkv"]  # sin uso
@@ -15,12 +15,12 @@ target = __DIRECTORY_TO_WORK_WITH__ + "/Videos"
 mode = len(sys.argv)
 
 
-def normalize(str):
-#    str[0] = str[0].upper()
-    str = str.replace(".", " ")
-    if str.endswith(" "):
-        str = str[:-1]
-    return str
+def normalize(string):
+#    string[0] = string[0].upper()
+    string = string.replace(".", " ")
+    if string.endswith(" "):
+        string = string[:-1]
+    return string
 
 
 def automatic_behaviour():
@@ -28,13 +28,13 @@ def automatic_behaviour():
     process_series(__DIRECTORY_TO_WORK_WITH__, target, 0)
 
 
-def process_series(__DIRECTORY_TO_WORK_WITH__, target, verbose):
+def process_series(folder_to_process, target, verbose):
 
     if not os.path.isdir(target):
         if verbose is 1:
             print "Creating " + target
         os.mkdir(target)
-    for root, dirs, files in os.walk(__DIRECTORY_TO_WORK_WITH__):
+    for root, dirs, files in os.walk(folder_to_process):
         if 'Videos' in dirs:
             dirs.remove('Videos')  # don't visit Videos directories
         for item in files:
@@ -61,17 +61,22 @@ def process_series(__DIRECTORY_TO_WORK_WITH__, target, verbose):
 
 
 
-def interactive(__DIRECTORY_TO_WORK_WITH__, target):
-
+def interactive(folder_to_process, target_folder):
+    """
+    Defines the command line "interactive" behaviour
+    """
     if sys.argv[2] == "/" or sys.argv[3] == "/":
         print "NO SE PUEDE /"
         quit()
-    process_series(sys.argv[2], target, 1)
+    process_series(sys.argv[2], target_folder, 1)
 
 
-def clean(__DIRECTORY_TO_WORK_WITH__):
-
-    for root, dirs, files in os.walk(__DIRECTORY_TO_WORK_WITH__):
+def clean(folder_to_clean):
+    """
+    Finds files we don't need, such as sample files also deletes
+    empty folders
+    """    
+    for root, dirs, files in os.walk(folder_to_clean):
         if len(dirs) == 0 and len(files) == 0:
             print root + " is empty delete?"
             if raw_input() in ('yes', 'y'):
@@ -96,7 +101,8 @@ elif mode >= 2:
         if mode == 4:
             interactive(sys.argv[2], sys.argv[3])
         else:
-            print "For interactive mode you need [source] and [destination] parameters"
+            print "For interactive mode you need [source] \
+             and [destination] parameters"
     elif sys.argv[1] in ('--clean', '-c'):
         clean(sys.argv[2])
     else:
